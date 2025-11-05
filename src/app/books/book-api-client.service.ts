@@ -8,8 +8,8 @@ export class BookApiClient {
   private readonly apiUrl = 'http://localhost:4730/books';
   private readonly http = inject(HttpClient);
 
-  getBooks(pageSize: number = 10, searchTerm?: string): Observable<Book[]> {
-    let params = new HttpParams().set('_limit', pageSize.toString());
+  getBooks(searchTerm?: string): Observable<Book[]> {
+    let params = new HttpParams();
 
     if (searchTerm) {
       // Search in title and author fields

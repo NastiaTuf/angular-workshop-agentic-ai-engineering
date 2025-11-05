@@ -26,4 +26,8 @@ export class BookApiClient {
   updateBook(id: string, book: Partial<Book>): Observable<Book> {
     return this.http.patch<Book>(`${this.apiUrl}/${id}`, book);
   }
+
+  createBook(book: Omit<Book, 'id' | 'isbn' | 'userId'>): Observable<Book> {
+    return this.http.post<Book>(this.apiUrl, book);
+  }
 }

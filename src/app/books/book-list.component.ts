@@ -1,17 +1,36 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
+import { RouterModule } from '@angular/router';
 import { Book } from './book';
 import { BookApiClient } from './book-api-client.service';
 import { BookItemComponent } from './book-item.component';
 
 @Component({
   selector: 'app-book-list',
-  imports: [CommonModule, ReactiveFormsModule, BookItemComponent],
+  imports: [CommonModule, ReactiveFormsModule, RouterModule, BookItemComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="container mx-auto px-4 py-12 max-w-7xl">
-      <h1 class="text-3xl font-bold mb-10 text-blue-700 border-b pb-4 border-gray-200">Book Collection</h1>
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-10 pb-4 border-b border-gray-200 gap-4">
+        <h1 class="text-3xl font-bold text-blue-700">Book Collection</h1>
+        <a
+          routerLink="/books/new"
+          class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold rounded-lg shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200"
+        >
+          <svg
+            class="w-5 h-5 mr-2"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+          </svg>
+          Create New Book
+        </a>
+      </div>
 
       <div class="mb-6">
         <div class="flex items-center border-b-2 border-gray-300 py-2">
@@ -151,6 +170,7 @@ import { BookItemComponent } from './book-item.component';
 })
 export class BookListComponent {
   private readonly bookApiClient = inject(BookApiClient);
+  private readonly destroyRef = inject(DestroyRef);
 
   // State signals
   books = signal<Book[]>([]);
@@ -223,23 +243,35 @@ export class BookListComponent {
   private searchTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
-    // Initialize search control subscription
-    this.searchControl.valueChanges.subscribe(value => {
-      this.searchTerm.set(value || '');
-      this.onSearchChange();
-    });
-
-    // Initialize page size control subscription
-    this.pageSizeControl.valueChanges.subscribe(value => {
-      if (value) {
-        this.pageSize.set(value);
-        // Adjust current page if it would be out of bounds
-        const maxPage = this.totalPages();
-        if (this.currentPage() > maxPage) {
-          this.currentPage.set(maxPage);
-        }
+    // Clean up search timeout on component destroy
+    this.destroyRef.onDestroy(() => {
+      if (this.searchTimeout) {
+        clearTimeout(this.searchTimeout);
+        this.searchTimeout = null;
       }
     });
+
+    // Initialize search control subscription
+    this.searchControl.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(value => {
+        this.searchTerm.set(value || '');
+        this.onSearchChange();
+      });
+
+    // Initialize page size control subscription
+    this.pageSizeControl.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(value => {
+        if (value) {
+          this.pageSize.set(value);
+          // Adjust current page if it would be out of bounds
+          const maxPage = this.totalPages();
+          if (this.currentPage() > maxPage) {
+            this.currentPage.set(maxPage);
+          }
+        }
+      });
 
     // Effect to adjust current page when books change (e.g., after search)
     effect(() => {
@@ -257,16 +289,19 @@ export class BookListComponent {
 
   private loadBooks(search?: string): void {
     this.loading.set(true);
-    this.bookApiClient.getBooks(search).subscribe({
-      next: books => {
-        this.books.set(books);
-        this.loading.set(false);
-      },
-      error: error => {
-        console.error('Error fetching books:', error);
-        this.loading.set(false);
-      }
-    });
+    this.bookApiClient
+      .getBooks(search)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: books => {
+          this.books.set(books);
+          this.loading.set(false);
+        },
+        error: error => {
+          console.error('Error fetching books:', error);
+          this.loading.set(false);
+        }
+      });
   }
 
   private onSearchChange(): void {

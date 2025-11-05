@@ -21,7 +21,6 @@ export class KanbanStorageService {
         return this.getDefaultState();
       }
       const parsed = JSON.parse(stored) as KanbanState;
-      // Ensure all required fields exist
       return {
         'want-to-read': parsed['want-to-read'] || [],
         'currently-reading': parsed['currently-reading'] || [],
@@ -47,13 +46,8 @@ export class KanbanStorageService {
 
   addBookToKanban(isbn: string, status: ReadingStatus = 'want-to-read'): void {
     const state = this.getKanbanState();
-    
-    // Remove from all columns first
-    state['want-to-read'] = state['want-to-read'].filter(s => s !== isbn);
-    state['currently-reading'] = state['currently-reading'].filter(s => s !== isbn);
-    state.completed = state.completed.filter(s => s !== isbn);
+    this.removeBookFromAllColumns(state, isbn);
 
-    // Add to specified column
     if (!state[status].includes(isbn)) {
       state[status].push(isbn);
     }
@@ -63,12 +57,8 @@ export class KanbanStorageService {
 
   removeBookFromKanban(isbn: string): void {
     const state = this.getKanbanState();
+    this.removeBookFromAllColumns(state, isbn);
     
-    state['want-to-read'] = state['want-to-read'].filter(s => s !== isbn);
-    state['currently-reading'] = state['currently-reading'].filter(s => s !== isbn);
-    state.completed = state.completed.filter(s => s !== isbn);
-    
-    // Remove rating if exists
     if (state.ratings && state.ratings[isbn]) {
       delete state.ratings[isbn];
     }
@@ -78,18 +68,19 @@ export class KanbanStorageService {
 
   updateBookStatus(isbn: string, newStatus: ReadingStatus): void {
     const state = this.getKanbanState();
-    
-    // Remove from all columns
-    state['want-to-read'] = state['want-to-read'].filter(s => s !== isbn);
-    state['currently-reading'] = state['currently-reading'].filter(s => s !== isbn);
-    state.completed = state.completed.filter(s => s !== isbn);
+    this.removeBookFromAllColumns(state, isbn);
 
-    // Add to new column
     if (!state[newStatus].includes(isbn)) {
       state[newStatus].push(isbn);
     }
 
     this.saveKanbanState(state);
+  }
+
+  private removeBookFromAllColumns(state: KanbanState, isbn: string): void {
+    state['want-to-read'] = state['want-to-read'].filter(s => s !== isbn);
+    state['currently-reading'] = state['currently-reading'].filter(s => s !== isbn);
+    state.completed = state.completed.filter(s => s !== isbn);
   }
 
   updateBookRating(isbn: string, rating: number): void {

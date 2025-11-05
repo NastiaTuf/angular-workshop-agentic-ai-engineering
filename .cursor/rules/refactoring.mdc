@@ -1,0 +1,260 @@
+---
+alwaysApply: true
+---
+
+# Angular Refactoring Guide
+
+This document contains extracted comments, refactoring tasks, and migration examples for modernizing the Angular codebase to Angular 20 standards.
+
+## Extracted Comments from Codebase
+
+### BookListComponent (`book-list.component.ts`)
+- **Line 270**: `// prefer debounce time and stream instead of settimeout` ✅ **FIXED** - Replaced setTimeout with RxJS debounceTime
+- **Line 317**: `//always unsubcribe` ✅ **FIXED** - Removed outdated comment (already using takeUntilDestroyed)
+- **Line 338**: `// Keep current page when searching (don't reset to page 1)` - This is a valid comment explaining behavior
+
+### BookDetailsComponent (`book-details.component.ts`)
+- Missing subscription cleanup for HTTP observables ✅ **FIXED** - Added takeUntilDestroyed to loadBook() and saveBook()
+
+### KanbanBoardComponent (`kanban-board.component.ts`)
+- **Line 304**: `// Reordering within same column - no need to update storage` - Valid comment
+- **Line 307**: `// Moving between columns` - Valid comment
+
+### KanbanStorageService (`kanban-storage.service.ts`)
+- Repeated logic for removing books from all columns ✅ **FIXED** - Extracted to removeBookFromAllColumns() helper method
+
+## Refactoring Tasks
+
+### Priority 1: Critical Issues ✅ COMPLETED
+
+1. **Remove Unused CommonModule Imports** ✅
+   - **Files**: `book-list.component.ts`, `book-item.component.ts`, `book-details.component.ts`, `kanban-board.component.ts`, `book-create.component.ts`
+   - **Issue**: CommonModule is imported but not needed when using native control flow (`@if`, `@for`)
+   - **Action**: Removed `CommonModule` from imports array and removed the import statement
+   - **Impact**: Reduces bundle size, cleaner code
+
+2. **Fix Missing Subscription Cleanup in BookDetailsComponent** ✅
+   - **File**: `book-details.component.ts`
+   - **Issue**: HTTP subscriptions in `loadBook()` and `saveBook()` methods didn't use `takeUntilDestroyed`
+   - **Action**: Added `takeUntilDestroyed(this.destroyRef)` to HTTP observables
+   - **Impact**: Prevents memory leaks
+
+3. **Replace setTimeout with RxJS debounceTime** ✅
+   - **File**: `book-list.component.ts`
+   - **Issue**: Using `setTimeout` for debouncing instead of RxJS operators
+   - **Action**: Replaced with `debounceTime(300)` and `distinctUntilChanged()` operators
+   - **Impact**: Better reactive programming, automatic cleanup
+
+4. **Extract Repeated Logic in KanbanStorageService** ✅
+   - **File**: `kanban-storage.service.ts`
+   - **Issue**: Repeated logic for removing books from all columns in multiple methods
+   - **Action**: Extracted to private helper method `removeBookFromAllColumns()`
+   - **Impact**: DRY principle, easier to maintain
+
+### Priority 2: Code Quality Improvements ✅ COMPLETED
+
+5. **Remove Outdated Comments** ✅
+   - **File**: `book-list.component.ts`
+   - **Issue**: Comment said "always unsubcribe" but code already uses `takeUntilDestroyed`
+   - **Action**: Removed outdated comment
+
+## Migration Examples
+
+### Example 1: Remove CommonModule
+
+**Before**:
+```typescript
+import { CommonModule } from '@angular/common';
+
+@Component({
+  imports: [CommonModule, ReactiveFormsModule, RouterModule],
+  // ...
+})
+```
+
+**After**:
+```typescript
+@Component({
+  imports: [ReactiveFormsModule, RouterModule],
+  // ...
+})
+```
+
+**Rationale**: With native control flow (`@if`, `@for`), CommonModule is not needed unless you use pipes like `DatePipe`, `CurrencyPipe`, or directives like `NgTemplateOutlet`.
+
+### Example 2: Replace setTimeout with debounceTime
+
+**Before** (`book-list.component.ts`):
+```typescript
+private searchTimeout: ReturnType<typeof setTimeout> | null = null;
+
+private onSearchChange(): void {
+  if (this.searchTimeout) {
+    clearTimeout(this.searchTimeout);
+  }
+  this.searchTimeout = setTimeout(() => {
+    this.loadBooks(this.searchTerm());
+  }, 300);
+}
+
+constructor() {
+  this.destroyRef.onDestroy(() => {
+    if (this.searchTimeout) {
+      clearTimeout(this.searchTimeout);
+      this.searchTimeout = null;
+    }
+  });
+}
+```
+
+**After**:
+```typescript
+import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
+
+constructor() {
+  // Search control with debounce using RxJS operators
+  this.searchControl.valueChanges
+    .pipe(
+      debounceTime(300),
+      distinctUntilChanged(),
+      takeUntilDestroyed(this.destroyRef)
+    )
+    .subscribe(value => {
+      this.searchTerm.set(value || '');
+      this.loadBooks(this.searchTerm());
+      // Keep current page when searching (don't reset to page 1)
+    });
+}
+```
+
+**Rationale**: 
+- Uses RxJS operators (more idiomatic Angular)
+- Automatic cleanup via `takeUntilDestroyed`
+- No manual timeout management needed
+- `distinctUntilChanged` prevents duplicate API calls
+
+### Example 3: Add Subscription Cleanup to BookDetailsComponent
+
+**Before** (`book-details.component.ts`):
+```typescript
+private loadBook(isbn: string): void {
+  this.loading.set(true);
+  this.error.set(null);
+
+  this.bookApiClient.getBook(isbn).subscribe({
+    next: book => {
+      this.book.set(book);
+      this.loading.set(false);
+    },
+    error: error => {
+      // ...
+    }
+  });
+}
+```
+
+**After**:
+```typescript
+import { DestroyRef, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+
+export class BookDetailsComponent {
+  private readonly destroyRef = inject(DestroyRef);
+  
+  private loadBook(isbn: string): void {
+    this.loading.set(true);
+    this.error.set(null);
+
+    this.bookApiClient.getBook(isbn)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: book => {
+          this.book.set(book);
+          this.loading.set(false);
+        },
+        error: error => {
+          // ...
+        }
+      });
+  }
+}
+```
+
+**Rationale**: Prevents memory leaks by automatically unsubscribing when component is destroyed.
+
+### Example 4: Extract Repeated Logic in KanbanStorageService
+
+**Before**:
+```typescript
+addBookToKanban(isbn: string, status: ReadingStatus = 'want-to-read'): void {
+  const state = this.getKanbanState();
+  
+  // Remove from all columns first
+  state['want-to-read'] = state['want-to-read'].filter(s => s !== isbn);
+  state['currently-reading'] = state['currently-reading'].filter(s => s !== isbn);
+  state.completed = state.completed.filter(s => s !== isbn);
+  // ...
+}
+```
+
+**After**:
+```typescript
+private removeBookFromAllColumns(state: KanbanState, isbn: string): void {
+  state['want-to-read'] = state['want-to-read'].filter(s => s !== isbn);
+  state['currently-reading'] = state['currently-reading'].filter(s => s !== isbn);
+  state.completed = state.completed.filter(s => s !== isbn);
+}
+
+addBookToKanban(isbn: string, status: ReadingStatus = 'want-to-read'): void {
+  const state = this.getKanbanState();
+  this.removeBookFromAllColumns(state, isbn);
+  // Add to specified column
+  if (!state[status].includes(isbn)) {
+    state[status].push(isbn);
+  }
+  this.saveKanbanState(state);
+}
+```
+
+**Rationale**: DRY principle, easier to maintain.
+
+## Instructions for @Angular
+
+When refactoring Angular code, follow these guidelines:
+
+1. **Always check for unused imports** - Remove CommonModule if native control flow is used
+2. **Always use `takeUntilDestroyed`** for all Observable subscriptions in components
+3. **Prefer RxJS operators** (`debounceTime`, `distinctUntilChanged`) over manual setTimeout/clearTimeout
+4. **Use `inject()` function** instead of constructor injection
+5. **Use signals** for component state instead of class properties
+6. **Use `computed()`** for derived state instead of getters or methods
+7. **Use native control flow** (`@if`, `@for`, `@switch`) instead of structural directives
+8. **Use `OnPush` change detection** for all components
+9. **Extract repeated logic** into private helper methods
+10. **Remove outdated comments** that no longer reflect the code
+11. **Check for memory leaks** - ensure all subscriptions use `takeUntilDestroyed`
+12. **Verify CommonModule usage** - only import if actually using pipes or specific directives
+
+## Testing After Refactoring
+
+After each refactoring task:
+1. Verify the application still compiles without errors
+2. Test the affected functionality manually
+3. Check browser console for any runtime errors
+4. Verify no memory leaks (check DevTools Memory profiler)
+5. Ensure subscriptions are properly cleaned up
+6. Test that debouncing still works correctly
+7. Verify search functionality maintains current page behavior
+
+## Refactoring Status
+
+✅ **All identified refactoring tasks have been completed** (as of the last refactoring session)
+
+### Completed Refactorings:
+- ✅ Removed CommonModule from all components
+- ✅ Replaced setTimeout with RxJS debounceTime in BookListComponent
+- ✅ Added takeUntilDestroyed to BookDetailsComponent HTTP subscriptions
+- ✅ Extracted repeated logic in KanbanStorageService
+- ✅ Removed outdated comments
+
+The codebase now follows Angular 20 best practices with proper subscription cleanup, reactive programming patterns, and cleaner code structure.

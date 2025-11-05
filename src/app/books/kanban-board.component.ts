@@ -1,4 +1,3 @@
-import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DragDropModule, CdkDragDrop, moveItemInArray, transferArrayItem } from '@angular/cdk/drag-drop';
@@ -13,7 +12,7 @@ import { ToastService } from '../shared/toast.service';
 
 @Component({
   selector: 'app-kanban-board',
-  imports: [CommonModule, DragDropModule, RouterModule],
+  imports: [DragDropModule, RouterModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 py-8">

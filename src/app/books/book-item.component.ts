@@ -1,4 +1,3 @@
-import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, effect, inject, input, signal } from '@angular/core';
 import { RouterModule } from '@angular/router';
 import { Book } from './book';
@@ -7,7 +6,7 @@ import { ToastService } from '../shared/toast.service';
 
 @Component({
   selector: 'app-book-item',
-  imports: [CommonModule, RouterModule],
+  imports: [RouterModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="block bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow duration-300 flex flex-col h-full">

@@ -1,7 +1,6 @@
-import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
 import { Book } from './book';
 import { BookApiClient } from './book-api-client.service';
@@ -9,7 +8,7 @@ import { ToastService } from '../shared/toast.service';
 
 @Component({
   selector: 'app-book-create',
-  imports: [CommonModule, RouterModule, ReactiveFormsModule],
+  imports: [RouterModule, ReactiveFormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 py-8">
@@ -253,7 +252,16 @@ export class BookCreateComponent {
   saving = signal(false);
   error = signal<string | null>(null);
 
-  bookForm: FormGroup = this.fb.group({
+  bookForm: FormGroup<{
+    title: FormControl<string | null>;
+    subtitle: FormControl<string | null>;
+    author: FormControl<string | null>;
+    publisher: FormControl<string | null>;
+    numPages: FormControl<number | null>;
+    price: FormControl<string | null>;
+    cover: FormControl<string | null>;
+    abstract: FormControl<string | null>;
+  }> = this.fb.group({
     title: ['', Validators.required],
     subtitle: [''],
     author: ['', Validators.required],
@@ -274,15 +282,16 @@ export class BookCreateComponent {
     this.error.set(null);
 
     const formValue = this.bookForm.value;
+    // Convert form values to book data, handling null values
     const bookData: Omit<Book, 'id' | 'isbn' | 'userId'> = {
-      title: formValue.title,
-      subtitle: formValue.subtitle || undefined,
-      author: formValue.author,
-      publisher: formValue.publisher,
-      numPages: formValue.numPages,
-      price: formValue.price,
-      cover: formValue.cover || '',
-      abstract: formValue.abstract || ''
+      title: formValue.title ?? '',
+      subtitle: formValue.subtitle ?? undefined,
+      author: formValue.author ?? '',
+      publisher: formValue.publisher ?? '',
+      numPages: formValue.numPages ?? 0,
+      price: formValue.price ?? '',
+      cover: formValue.cover ?? '',
+      abstract: formValue.abstract ?? ''
     };
 
     this.bookApiClient

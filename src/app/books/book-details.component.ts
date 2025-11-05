@@ -1,14 +1,15 @@
-import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
-import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { FormBuilder, FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
+import { filter, map } from 'rxjs/operators';
 import { Book } from './book';
 import { BookApiClient } from './book-api-client.service';
 import { ToastService } from '../shared/toast.service';
 
 @Component({
   selector: 'app-book-details',
-  imports: [CommonModule, RouterModule, ReactiveFormsModule],
+  imports: [RouterModule, ReactiveFormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="container mx-auto px-4 py-8 max-w-6xl">
@@ -335,6 +336,7 @@ export class BookDetailsComponent {
   private readonly bookApiClient = inject(BookApiClient);
   private readonly toastService = inject(ToastService);
   private readonly fb = inject(FormBuilder);
+  private readonly destroyRef = inject(DestroyRef);
 
   book = signal<Book | null>(null);
   loading = signal(true);
@@ -342,7 +344,16 @@ export class BookDetailsComponent {
   isEditMode = signal(false);
   saving = signal(false);
 
-  bookForm: FormGroup = this.fb.group({
+  bookForm: FormGroup<{
+    title: FormControl<string | null>;
+    subtitle: FormControl<string | null>;
+    author: FormControl<string | null>;
+    publisher: FormControl<string | null>;
+    numPages: FormControl<number | null>;
+    price: FormControl<string | null>;
+    cover: FormControl<string | null>;
+    abstract: FormControl<string | null>;
+  }> = this.fb.group({
     title: ['', Validators.required],
     subtitle: [''],
     author: ['', Validators.required],
@@ -354,32 +365,43 @@ export class BookDetailsComponent {
   });
 
   constructor() {
-    const isbn = this.route.snapshot.paramMap.get('isbn');
-    if (isbn) {
-      this.loadBook(isbn);
-    } else {
-      this.error.set('ISBN parameter is missing');
-      this.loading.set(false);
-    }
+    // Use observable route params for better reactivity
+    this.route.paramMap
+      .pipe(
+        map(params => params.get('isbn')),
+        filter((isbn): isbn is string => isbn !== null),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe({
+        next: isbn => {
+          this.loadBook(isbn);
+        },
+        error: () => {
+          this.error.set('ISBN parameter is missing');
+          this.loading.set(false);
+        }
+      });
   }
 
   private loadBook(isbn: string): void {
     this.loading.set(true);
     this.error.set(null);
 
-    this.bookApiClient.getBook(isbn).subscribe({
-      next: book => {
-        this.book.set(book);
-        this.loading.set(false);
-      },
-      error: error => {
-        console.error('Error fetching book:', error);
-        this.error.set(
-          error.status === 404 ? 'This book could not be found.' : 'An error occurred while loading the book.'
-        );
-        this.loading.set(false);
-      }
-    });
+    this.bookApiClient.getBook(isbn)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: book => {
+          this.book.set(book);
+          this.loading.set(false);
+        },
+        error: error => {
+          console.error('Error fetching book:', error);
+          this.error.set(
+            error.status === 404 ? 'This book could not be found.' : 'An error occurred while loading the book.'
+          );
+          this.loading.set(false);
+        }
+      });
   }
 
   enterEditMode(): void {
@@ -430,19 +452,33 @@ export class BookDetailsComponent {
     this.saving.set(true);
     const formValue = this.bookForm.value;
 
-    this.bookApiClient.updateBook(currentBook.isbn, formValue).subscribe({
-      next: updatedBook => {
-        this.book.set(updatedBook);
-        this.isEditMode.set(false);
-        this.saving.set(false);
-        this.toastService.show('Book updated successfully');
-      },
-      error: error => {
-        console.error('Error updating book:', error);
-        this.saving.set(false);
-        this.toastService.show('Failed to update book. Please try again.');
-      }
-    });
+    // Convert form values to Book partial, handling null values
+    const bookUpdate: Partial<Book> = {
+      title: formValue.title ?? '',
+      subtitle: formValue.subtitle ?? undefined,
+      author: formValue.author ?? '',
+      publisher: formValue.publisher ?? '',
+      numPages: formValue.numPages ?? 0,
+      price: formValue.price ?? '',
+      cover: formValue.cover ?? '',
+      abstract: formValue.abstract ?? ''
+    };
+
+    this.bookApiClient.updateBook(currentBook.isbn, bookUpdate)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: updatedBook => {
+          this.book.set(updatedBook);
+          this.isEditMode.set(false);
+          this.saving.set(false);
+          this.toastService.show('Book updated successfully');
+        },
+        error: error => {
+          console.error('Error updating book:', error);
+          this.saving.set(false);
+          this.toastService.show('Failed to update book. Please try again.');
+        }
+      });
   }
 
   goBack(): void {

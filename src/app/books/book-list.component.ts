@@ -1,15 +1,15 @@
-import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, effect, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
+import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { Book } from './book';
 import { BookApiClient } from './book-api-client.service';
 import { BookItemComponent } from './book-item.component';
 
 @Component({
   selector: 'app-book-list',
-  imports: [CommonModule, ReactiveFormsModule, RouterModule, BookItemComponent],
+  imports: [ReactiveFormsModule, RouterModule, BookItemComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="container mx-auto px-4 py-12 max-w-7xl">
@@ -262,23 +262,18 @@ export class BookListComponent {
     return pages;
   });
 
-  private searchTimeout: ReturnType<typeof setTimeout> | null = null;
-
   constructor() {
-    // Clean up search timeout on component destroy
-    this.destroyRef.onDestroy(() => {
-      if (this.searchTimeout) {
-        clearTimeout(this.searchTimeout);
-        this.searchTimeout = null;
-      }
-    });
-
-    // Initialize search control subscription
+    // Search control with debounce using RxJS operators
     this.searchControl.valueChanges
-      .pipe(takeUntilDestroyed(this.destroyRef))
+      .pipe(
+        debounceTime(300),
+        distinctUntilChanged(),
+        takeUntilDestroyed(this.destroyRef)
+      )
       .subscribe(value => {
         this.searchTerm.set(value || '');
-        this.onSearchChange();
+        this.loadBooks(this.searchTerm());
+        // Keep current page when searching (don't reset to page 1)
       });
 
     // Initialize page size control subscription
@@ -324,17 +319,6 @@ export class BookListComponent {
           this.loading.set(false);
         }
       });
-  }
-
-  private onSearchChange(): void {
-    // Debounce search to avoid too many API calls while typing
-    if (this.searchTimeout) {
-      clearTimeout(this.searchTimeout);
-    }
-    this.searchTimeout = setTimeout(() => {
-      this.loadBooks(this.searchTerm());
-      // Keep current page when searching (don't reset to page 1)
-    }, 300);
   }
 
   clearSearch(): void {

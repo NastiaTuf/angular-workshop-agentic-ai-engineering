@@ -1,0 +1,14 @@
+{
+    "mcpServers": {
+      "angular-cli": {
+        "command": "npx",
+        "args": ["-y", "@angular/cli", "mcp"]
+      },
+      "workshops-de-angular-mcp": {
+        "command": "node",
+        "args": [
+          "C:\\Users\\MarcoDoell\\Projects\\angular-workshop-agentic-ai-engineering\\dist\\angular-mcp\\index.js"
+        ]
+      }
+    }
+}

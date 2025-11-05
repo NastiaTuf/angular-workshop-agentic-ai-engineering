@@ -23,7 +23,7 @@ export class BookApiClient {
     return this.http.get<Book>(`${this.apiUrl}/${isbn}`);
   }
 
-  updateBook(isbn: string, book: Partial<Book>): Observable<Book> {
-    return this.http.put<Book>(`${this.apiUrl}/${isbn}`, book);
+  updateBook(id: string, book: Partial<Book>): Observable<Book> {
+    return this.http.patch<Book>(`${this.apiUrl}/${id}`, book);
   }
 }
